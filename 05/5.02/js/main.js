@@ -5,7 +5,7 @@
 */
 
 var margin = { left:80, right:20, top:50, bottom:100 };
-
+const t = d3.transition().duration(700);
 var width = 600 - margin.left - margin.right,
     height = 400 - margin.top - margin.bottom;
     
@@ -16,8 +16,25 @@ var g = d3.select("#chart-area")
     .append("g")
         .attr("transform", "translate(" + margin.left + ", " + margin.top + ")");
 
+
+// X Scale
+var x = d3.scaleBand()
+    .range([0, width])
+    .padding(0.2);
+
+// Y Scale
+var y = d3.scaleLinear()
+    .range([height, 0]);
+
+let xAxisGroup = g.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + height +")");
+
+let yAxisGroup = g.append("g")
+    .attr("class", "y axis");
+
 // X Label
-g.append("text")
+const xLabel = g.append("text")
     .attr("y", height + 50)
     .attr("x", width / 2)
     .attr("font-size", "20px")
@@ -25,13 +42,14 @@ g.append("text")
     .text("Month");
 
 // Y Label
-g.append("text")
+const yLabel = g.append("text")
     .attr("y", -60)
     .attr("x", -(height / 2))
     .attr("font-size", "20px")
     .attr("text-anchor", "middle")
-    .attr("transform", "rotate(-90)")
-    .text("Revenue");
+    .attr("transform", "rotate(-90)");
+
+let isRevenue = true;
 
 d3.json("data/revenues.json").then(function(data){
     // console.log(data);
@@ -39,49 +57,72 @@ d3.json("data/revenues.json").then(function(data){
     // Clean data
     data.forEach(function(d) {
         d.revenue = +d.revenue;
+        d.profit = +d.profit;
     });
 
-    // X Scale
-    var x = d3.scaleBand()
-        .domain(data.map(function(d){ return d.month }))
-        .range([0, width])
-        .padding(0.2);
+    // run every x milliseconds
+    d3.interval(function(){
+        update(data);
+        isRevenue = !isRevenue;
+    }, 1000);
 
-    // Y Scale
-    var y = d3.scaleLinear()
-        .domain([0, d3.max(data, function(d) { return d.revenue })])
-        .range([height, 0]);
+    // run for the first time
+    update(data);
+});
 
+const update = function (data) {
+    let currentY = isRevenue ? "revenue":"profit";
+    yLabel.text(isRevenue ? "Revenue": "Profit");
+    data = isRevenue ? data : data.slice(1);
+    x.domain(data.map(function(d){ return d.month }));
+    y.domain([0, d3.max(data, function(d) { return d[currentY] })]);
     // X Axis
     var xAxisCall = d3.axisBottom(x);
-    g.append("g")
-        .attr("class", "x axis")
-        .attr("transform", "translate(0," + height +")")
+    xAxisGroup
+        .transition(t)
         .call(xAxisCall);
 
     // Y Axis
     var yAxisCall = d3.axisLeft(y)
         .tickFormat(function(d){ return "$" + d; });
-    g.append("g")
-        .attr("class", "y axis")
+    yAxisGroup
+        .transition(t)
         .call(yAxisCall);
 
-    // Bars
+    // Join
     var rects = g.selectAll("rect")
-        .data(data)
-        
+        .data(data, (item)=> item.month);
+
+    //Exit:
+    rects.exit()
+        .attr("fill","red")
+        .transition(t)
+        .attr("height", 0)
+        .attr("y", y(0))
+        .remove();
+    // Update: update existing values
+    // rects
+    //     .transition(t)
+    //     .attr("y", function(d){ return y(d[currentY]); })
+    //     .attr("x", function(d){ return x(d.month) })
+    //     .attr("width", x.bandwidth)
+    //     .attr("height", function(d){ return height - y(d[currentY]); })
+
+    // Enter:
     rects.enter()
         .append("rect")
-            .attr("y", function(d){ return y(d.revenue); })
-            .attr("x", function(d){ return x(d.month) })
-            .attr("height", function(d){ return height - y(d.revenue); })
-            .attr("width", x.bandwidth)
-            .attr("fill", "grey");
+        .attr("y", y(0))
+        .attr("height", 0)
+        .attr("width", x.bandwidth)
+        .attr("fill", "grey")
+        .merge(rects)
+        .transition(t)
+        .attr("x", function(d){ return x(d.month) })
+        .attr("y", function(d){ return y(d[currentY]) })
+        .attr("height", function(d){ return height - y(d[currentY]); });
 
-    d3.interval(function(){
-        console.log("Hello World");
-    }, 1000);
-});
+    ;
+}
 
 
 
